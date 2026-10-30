@@ -1,6 +1,7 @@
 """Deterministic provider confined to automated tests."""
 
 import asyncio
+import json
 from app.agents import Result
 from app import schemas as s
 
@@ -61,6 +62,21 @@ class TestProvider:
                     for e in context["proposal"]["edits"]
                 ]
             }
+        elif schema == s.StrategyOptions:
+            data = {
+                "options": [
+                    {
+                        "id": "clarify",
+                        "title": "Clarify ownership",
+                        "summary": "Use confirmed contributions with clear ownership.",
+                    },
+                    {
+                        "id": "evidence",
+                        "title": "Strengthen evidence",
+                        "summary": "Narrow unsupported claims and cite project evidence.",
+                    },
+                ]
+            }
         elif schema == s.Question:
             data = {
                 "text": f"For {context['target_role']}, explain ownership after {len(context['transcript'])} answers",
@@ -71,6 +87,7 @@ class TestProvider:
             data = {
                 "text": "I can confirm only supplied evidence. A proposed design would require validation.",
                 "limitations": ["Missing measurements"],
+                "knowledge_ids": [x["id"] for x in context.get("knowledge", [])],
                 "claim_ids": [claim.get("id", "")],
             }
         elif schema == s.Evaluation:
@@ -116,8 +133,8 @@ class TestProvider:
         else:
             raise AssertionError(schema)
         if on_snapshot:
-            await on_snapshot(data["text"][:40])
-            await on_snapshot(data["text"])
+            await on_snapshot((data.get("text") or json.dumps(data))[:40])
+            await on_snapshot(data.get("text") or json.dumps(data))
         return Result(schema.model_validate(data).model_dump(mode="json"), 100, 50)
 
     async def research(self, topics, scope=None):

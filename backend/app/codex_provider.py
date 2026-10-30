@@ -122,10 +122,11 @@ class CodexProvider:
                                 )
                             except ValueError:
                                 continue
-                            if isinstance(partial, dict) and isinstance(
-                                partial.get("text"), str
-                            ):
-                                await on_snapshot(partial["text"])
+                            if isinstance(partial, dict):
+                                await on_snapshot(
+                                    partial.get("text")
+                                    or json.dumps(partial, ensure_ascii=False)
+                                )
                                 last_snapshot = time.monotonic()
                         elif method == "item/completed":
                             item = params["item"]
@@ -150,7 +151,9 @@ class CodexProvider:
                     raise CodexError("Codex returned no final structured output")
                 data = schema.model_validate_json(final[-1]).model_dump(mode="json")
                 if on_snapshot:
-                    await on_snapshot(data["text"])
+                    await on_snapshot(
+                        data.get("text") or json.dumps(data, ensure_ascii=False)
+                    )
                 return Result(
                     data, usage.get("inputTokens", 0), usage.get("outputTokens", 0)
                 ), list(items.values())

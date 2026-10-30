@@ -1,5 +1,6 @@
 import os
 import pytest_asyncio
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.models import Base
 from app import main
@@ -18,6 +19,8 @@ async def env(tmp_path, monkeypatch):
         )
     engine = create_async_engine(url)
     async with engine.begin() as c:
+        if engine.dialect.name == "postgresql":
+            await c.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await c.run_sync(Base.metadata.drop_all)
         await c.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)

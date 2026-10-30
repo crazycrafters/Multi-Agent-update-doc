@@ -21,6 +21,7 @@ from .database import Session, get_db
 from .workflow import Workflow, create_version, rows, public, event, TERMINAL
 from .parsing import MAX_UPLOAD, parse_resume
 from .evidence import metric_changes
+from .knowledge import workspace_config, KnowledgeBudgetError
 
 from .logging_config import configure_logging
 
@@ -89,6 +90,13 @@ async def guard(request, call_next):
             )
         q.append(now)
     return await call_next(request)
+
+
+@app.exception_handler(KnowledgeBudgetError)
+async def knowledge_budget_error(request, exc):
+    return JSONResponse(
+        {"error": {"code": "budget_reached", "message": str(exc)}}, status_code=409
+    )
 
 
 @app.exception_handler(HTTPException)
@@ -175,10 +183,15 @@ async def resumes(db=Depends(get_db)):
 @app.post("/resumes", status_code=201)
 async def upload(
     file: UploadFile = File(...),
+    profile_id: str = Form(""),
     target_role: str = Form(""),
     job_description: str = Form(""),
     db=Depends(get_db),
 ):
+    profile = await need(db, m.Profile, profile_id) if profile_id else None
+    if profile:
+        target_role = profile.target_role
+        job_description = profile.job_description
     if not target_role.strip() and not job_description.strip():
         raise HTTPException(422, "Provide a target role or job description")
     if len(target_role) > 500 or len(job_description) > 30000:
@@ -196,7 +209,16 @@ async def upload(
         user = m.User()
         db.add(user)
         await db.flush()
+    if not profile:
+        profile = m.Profile(
+            name=target_role.strip() or "Target role",
+            target_role=target_role.strip() or "Role described in job description",
+            job_description=job_description.strip(),
+        )
+        db.add(profile)
+        await db.flush()
     resume = m.Resume(
+        profile_id=profile.id,
         user_id=user.id,
         title=(file.filename or "Resume")[:200],
         original_text=content,
@@ -384,7 +406,7 @@ async def start_new_locked(db, resume, body):
         workflow.provider, OpenAIProvider
     ):
         raise HTTPException(
-            503, "Connect an OpenAI API key in the dashboard before starting"
+            503, "Connect an OpenAI API key in Settings before starting"
         )
     if isinstance(workflow.provider, CodexProvider):
         try:
@@ -403,7 +425,18 @@ async def start_new_locked(db, resume, body):
         )
         or 0
     )
+    cfg = await workspace_config(db)
+    if cfg["workflow"]["semantic_retrieval"] and not body.embedding_consent:
+        raise HTTPException(
+            422, "Enable embedding consent or disable semantic retrieval in Settings"
+        )
+    if cfg["workflow"]["semantic_retrieval"] and not workflow.config.openai_api_key:
+        raise HTTPException(
+            503,
+            "Semantic RAG needs an OpenAI embedding key; disable semantic retrieval to use full-text RAG with Codex alone",
+        )
     it = m.Iteration(
+        planned_iterations=body.iteration_count,
         resume_id=resume.id,
         version_id=resume.current_version_id,
         number=n + 1,
@@ -411,7 +444,14 @@ async def start_new_locked(db, resume, body):
         provider=getattr(workflow.provider, "kind", "openai"),
         provider_consent=body.provider_consent,
         research_consent=body.research_consent,
-        checkpoint={},
+        checkpoint={
+            "settings": cfg,
+            "embedding_consent": body.embedding_consent,
+            "target_role": (await db.get(m.Profile, resume.profile_id)).target_role,
+            "job_description": (
+                await db.get(m.Profile, resume.profile_id)
+            ).job_description,
+        },
     )
     db.add(it)
     await db.commit()
@@ -438,6 +478,13 @@ async def approve(iid: str, body: s.StartRequest, db=Depends(get_db)):
             )
         if not body.provider_consent:
             raise HTTPException(422, "Provider consent required")
+        if old.checkpoint.get("strategies") and not old.checkpoint.get(
+            "selected_strategy"
+        ):
+            raise HTTPException(
+                409,
+                "Select a resume update strategy or Stop before starting another batch",
+            )
         old.state = "COMPLETED"
         await event(
             db,
@@ -768,3 +815,8 @@ async def codex_logout(request: Request):
                 "Codex logout failed. Retry before assuming saved credentials were removed.",
             )
     return await provider_status()
+
+
+from .workspace_api import router as workspace_router
+
+app.include_router(workspace_router)

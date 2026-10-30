@@ -13,6 +13,7 @@ from sqlalchemy import (
     Float,
     UniqueConstraint,
 )
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -41,6 +42,7 @@ class User(Record, Base):
 class Resume(Record, Base):
     __tablename__ = "resumes"
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    profile_id: Mapped[str] = mapped_column(ForeignKey("profiles.id"), index=True)
     title: Mapped[str]
     original_text: Mapped[str] = mapped_column(Text)
     target_role: Mapped[str] = mapped_column(Text)
@@ -66,6 +68,9 @@ class Project(Record, Base):
 
 class EvidenceRecord(Record, Base):
     __tablename__ = "evidence_records"
+    knowledge_document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("knowledge_documents.id"), nullable=True
+    )
     resume_id: Mapped[str] = mapped_column(ForeignKey("resumes.id"))
     text: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(Text)
@@ -125,6 +130,9 @@ class Iteration(Record, Base):
     version_id: Mapped[str] = mapped_column(ForeignKey("resume_versions.id"))
     output_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     number: Mapped[int]
+    run_id: Mapped[str] = mapped_column(String(36), default=uid)
+    run_step: Mapped[int] = mapped_column(default=1, server_default="1")
+    planned_iterations: Mapped[int] = mapped_column(default=1, server_default="1")
     provider: Mapped[str] = mapped_column(default="openai", server_default="openai")
     state: Mapped[str] = mapped_column(default="IDLE")
     paused: Mapped[bool] = mapped_column(default=False)
@@ -154,6 +162,7 @@ class InterviewQuestion(Record, Base):
 
 class InterviewAnswer(Record, Base):
     __tablename__ = "interview_answers"
+    knowledge_ids: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     question_id: Mapped[str] = mapped_column(
         ForeignKey("interview_questions.id"), unique=True
     )
@@ -251,3 +260,50 @@ class ProviderThread(Record, Base):
     agent: Mapped[str]
     channel: Mapped[str]
     thread_id: Mapped[str]
+
+
+class Profile(Record, Base):
+    __tablename__ = "profiles"
+    name: Mapped[str]
+    target_role: Mapped[str] = mapped_column(Text)
+    job_description: Mapped[str] = mapped_column(Text, default="")
+
+
+class WorkspaceSettings(Base):
+    __tablename__ = "workspace_settings"
+    id: Mapped[str] = mapped_column(primary_key=True, default="workspace")
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class KnowledgeDocument(Record, Base):
+    __tablename__ = "knowledge_documents"
+    profile_id: Mapped[str] = mapped_column(ForeignKey("profiles.id"), index=True)
+    title: Mapped[str]
+    project: Mapped[str] = mapped_column(default="")
+    kind: Mapped[str]
+    status: Mapped[str]
+    source: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(default=1)
+    active: Mapped[bool] = mapped_column(default=True)
+
+
+class KnowledgeChunk(Record, Base):
+    __tablename__ = "knowledge_chunks"
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_documents.id"), index=True
+    )
+    profile_id: Mapped[str] = mapped_column(ForeignKey("profiles.id"), index=True)
+    position: Mapped[int]
+    text: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list | None] = mapped_column(
+        Vector(1536).with_variant(JSON(), "sqlite"), nullable=True
+    )
+    embedding_model: Mapped[str | None] = mapped_column(nullable=True)
+
+
+class EmbeddingUsage(Record, Base):
+    __tablename__ = "embedding_usage"
+    profile_id: Mapped[str] = mapped_column(ForeignKey("profiles.id"))
+    input_tokens: Mapped[int]
+    estimated_cost: Mapped[float | None] = mapped_column(Float, nullable=True)

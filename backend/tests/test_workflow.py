@@ -71,17 +71,28 @@ async def test_full_workflow_approval_exports_sse(env):
         if task == "research":
             assert set(ctx) == {"topics"}
     stream = await c.get(f"/iterations/{iid}/events")
-    assert "approval_required" in stream.text
+    assert "strategy_choices" in stream.text
     ids = [
         int(line[4:]) for line in stream.text.splitlines() if line.startswith("id: ")
     ]
     replay = await c.get(
         f"/iterations/{iid}/events", headers={"Last-Event-ID": str(ids[-1])}
     )
-    assert "approval_required" not in replay.text
+    assert "strategy_choices" not in replay.text
     assert (
         await c.post(f"/resumes/{rid}/iterations", json={"provider_consent": True})
     ).status_code == 409
+    assert (
+        await c.post(f"/iterations/{iid}/next", json={"provider_consent": True})
+    ).status_code == 409
+    choice = run["iteration"]["checkpoint"]["strategies"][0]["id"]
+    assert (
+        await c.post(
+            f"/iterations/{iid}/strategies/select", json={"strategy_id": choice}
+        )
+    ).status_code == 200
+    await asyncio.sleep(0.01)
+    await wait(runner, iid)
     nxt = await c.post(f"/iterations/{iid}/next", json={"provider_consent": True})
     assert nxt.status_code == 201 and nxt.json()["number"] == 2
     await wait(runner, nxt.json()["id"])

@@ -54,6 +54,7 @@ class Question(Strict):
 
 
 class Answer(Strict):
+    knowledge_ids: list[str]
     text: str
     limitations: list[str]
     claim_ids: list[str]
@@ -141,6 +142,8 @@ class ResearchNotes(Strict):
 
 
 class StartRequest(Strict):
+    iteration_count: int = Field(default=1, ge=1, le=100)
+    embedding_consent: bool = False
     provider_consent: bool = False
     research_consent: bool = False
 
@@ -222,3 +225,77 @@ class CodexResearchSource(Strict):
 class CodexResearchResult(Strict):
     text: str
     sources: list[CodexResearchSource]
+
+
+class ProfileRequest(Strict):
+    name: str = Field(min_length=1, max_length=120)
+    target_role: str = Field(min_length=1, max_length=500)
+    job_description: str = Field(default="", max_length=30000)
+
+
+class KnowledgeRequest(Strict):
+    title: str = Field(min_length=1, max_length=200)
+    project: str = Field(default="", max_length=200)
+    kind: Literal["personal", "reference", "open_question"]
+    status: Literal[
+        "UNVERIFIED",
+        "CANDIDATE_CONFIRMED",
+        "PUBLIC_CONTEXT",
+        "PROPOSED",
+        "CONTRADICTED",
+    ] = "UNVERIFIED"
+    source: str = Field(min_length=1, max_length=2000)
+    content: str = Field(min_length=1, max_length=100000)
+
+
+class SearchRequest(Strict):
+    query: str = Field(min_length=1, max_length=2000)
+    limit: int = Field(default=6, ge=1, le=12)
+    semantic: bool = False
+    embedding_consent: bool = False
+
+
+class EmbeddingRequest(Strict):
+    consent: bool = False
+
+
+class AgentStrategies(Strict):
+    resume: str = Field(default="", max_length=6000)
+    interviewee: str = Field(default="", max_length=6000)
+    interviewer: str = Field(default="", max_length=6000)
+
+
+class WorkflowOptions(Strict):
+    question_count: int = Field(default=10, ge=1, le=20)
+    followups: bool = True
+    initial_draft: bool = True
+    research: bool = True
+    semantic_retrieval: bool = False
+
+
+class WorkspaceConfig(Strict):
+    strategies: AgentStrategies = Field(default_factory=AgentStrategies)
+    workflow: WorkflowOptions = Field(default_factory=WorkflowOptions)
+    api_budget_usd: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    input_usd_per_million: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    output_usd_per_million: float | None = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    search_usd_per_call: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    embedding_usd_per_million: float | None = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+
+
+class ResumeStrategy(Strict):
+    id: str
+    title: str = Field(min_length=1, max_length=70)
+    summary: str = Field(min_length=1, max_length=240)
+
+
+class StrategyOptions(Strict):
+    options: list[ResumeStrategy] = Field(min_length=2, max_length=4)
+
+
+class StrategySelection(Strict):
+    strategy_id: str

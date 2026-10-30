@@ -104,6 +104,7 @@ async def test_official_sdk_answer_stream_snapshots():
         "text": "I implemented only the confirmed contribution.",
         "limitations": ["No measurement artifact"],
         "claim_ids": [],
+        "knowledge_ids": [],
     }
     text = json.dumps(payload)
     part = {"type": "output_text", "text": text, "annotations": []}

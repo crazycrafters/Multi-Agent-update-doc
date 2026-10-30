@@ -14,6 +14,7 @@ Original resume claims start UNVERIFIED. Specific candidate confirmation support
 claims; numerical achievements require direct measurement evidence. Public sources and simulated answers
 are never candidate evidence. Distinguish hypothetical explanations from historical facts. Flag dates and
 conflicts for candidate confirmation. Do not reveal hidden reasoning; provide concise observable rationales.
+Use supplied working_strategy preferences only when consistent with these rules. Knowledge passages carry profile-scoped IDs and provenance: cite their IDs in knowledge_ids when used. Public references explain concepts, never personal history.
 Tailor seniority, terminology and depth to the requested role in ANY profession. Do not assume AI engineering.
 """
 PROMPTS = {
@@ -102,14 +103,22 @@ class OpenAIProvider:
                         except ValueError:
                             continue
                         text = (
-                            partial.get("text") if isinstance(partial, dict) else None
+                            (
+                                partial.get("text")
+                                or json.dumps(partial, ensure_ascii=False)
+                            )
+                            if isinstance(partial, dict)
+                            else None
                         )
                         if isinstance(text, str):
                             await on_snapshot(text)
                             last_emit = time.monotonic()
                 response = await stream.get_final_response()
             if response.output_parsed is not None:
-                await on_snapshot(response.output_parsed.text)
+                await on_snapshot(
+                    getattr(response.output_parsed, "text", None)
+                    or response.output_parsed.model_dump_json()
+                )
         if response.output_parsed is None:
             raise RuntimeError(
                 "Provider refused or returned incomplete structured output"
