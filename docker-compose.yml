@@ -21,11 +21,18 @@ services:
       RESUME_MODEL: ${RESUME_MODEL:-gpt-4.1-mini}
       INTERVIEWEE_MODEL: ${INTERVIEWEE_MODEL:-gpt-4.1-mini}
       INTERVIEWER_MODEL: ${INTERVIEWER_MODEL:-gpt-4.1-mini}
+      RESUME_CODEX_HOME: /app/.codex-runtime
+      CODEX_MODEL: ${CODEX_MODEL:-}
+      CODEX_RESUME_MODEL: ${CODEX_RESUME_MODEL:-}
+      CODEX_INTERVIEWEE_MODEL: ${CODEX_INTERVIEWEE_MODEL:-}
+      CODEX_INTERVIEWER_MODEL: ${CODEX_INTERVIEWER_MODEL:-}
       API_ACCESS_TOKEN: ${API_ACCESS_TOKEN:-}
       INPUT_USD_PER_MILLION: ${INPUT_USD_PER_MILLION:-}
       OUTPUT_USD_PER_MILLION: ${OUTPUT_USD_PER_MILLION:-}
       WEB_SEARCH_USD_PER_CALL: ${WEB_SEARCH_USD_PER_CALL:-}
       MAX_ITERATION_TOKENS: ${MAX_ITERATION_TOKENS:-150000}
+    volumes:
+      - codex_data:/app/.codex-runtime
     ports: ["127.0.0.1:8000:8000"]
     depends_on:
       db: {condition: service_healthy}
@@ -39,3 +46,4 @@ services:
     restart: unless-stopped
 volumes:
   postgres_data:
+  codex_data:

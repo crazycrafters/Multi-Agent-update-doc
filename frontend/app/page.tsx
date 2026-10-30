@@ -424,8 +424,8 @@ function Workspace() {
                     checked={providerConsent}
                     onChange={(e) => setProviderConsent(e.target.checked)}
                   />
-                  I authorize sending my resume, target and evidence to OpenAI
-                  for this iteration.
+                  I authorize sending my resume, target and evidence to the
+                  selected provider for this iteration.
                 </label>
                 <label className="flex items-center gap-2">
                   <input

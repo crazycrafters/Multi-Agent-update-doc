@@ -24,7 +24,7 @@ The repository started empty. The application now accepts **any target role name
 
 ## Remaining validation and limits
 
-- Live OpenAI agent/research execution requires a securely configured `RESUME_OPENAI_KEY` (or `OPENAI_API_KEY` locally), runtime access to api.openai.com, and approval for paid validation. Deterministic E2E success is not live-provider success. Do not declare the complete production definition of done satisfied until that validation passes.
+- Live execution requires either dashboard/API-key configuration or a user-authorized Codex ChatGPT login, the selected provider network destinations, and authorization to consume account usage. Deterministic E2E success is not live-provider success. Do not declare the complete production definition of done satisfied until that validation passes.
 - Cloud draft persistence is confirmed; publication and fresh-task snapshot restoration are not verified.
 - Single-user, one-backend-worker deployment only. Authentication is an optional shared API token, not multi-tenant identity/authorization. No distributed leases or queue.
 - No runtime MCP client/skill registry; cloud onboarding/runtime skills are used by the development assistant only.
@@ -40,3 +40,16 @@ Use the existing isolated checkout; do not create Git worktrees unless requested
 - Connection status explicitly says configured, not validated. Connecting does not make a paid API request. Active tasks block credential changes; existing API-token protection and an origin check protect connection mutations.
 - Verified: 17 backend tests passed, including session connection/disconnect, status redaction, auth/origin rejection and active-work protection. Three frontend tests passed, including input clearing and no browser-storage persistence. Production build passed.
 - ChatGPT-authenticated Codex threads are a possible future provider integration; this update does not implement that adapter or reuse browser cookies.
+
+## Two-provider update (current)
+
+- Added OpenAI API-key and Codex/ChatGPT options in the dashboard. API keys stay in process memory; Codex uses official device authorization with managed credential/transcript files in a dedicated Docker volume. No browser cookies, extracted tokens or existing host account credentials are used.
+- Implemented a pinned Codex 0.163.0 app-server JSON-RPC adapter with strict output schemas, streamed public messages, usage notifications, timeout interruption, isolated per-iteration role threads and persisted resume IDs. Independent audits and generic-topic research use separate channels. Research sources must be observed in real web-tool actions/results. Shell/patch/code-mode/delegation/MCP/plugin tools are disabled and unexpected requests denied.
+- Iterations persist their original provider. Active tasks prevent provider switching; recovered Codex iterations need Codex selected before resume. Provider selection never automatically starts an iteration. Codex dollar-cost estimates remain unknown rather than using API pricing.
+- Added a migration for provider pinning and thread records. CLI is included in the backend image. `.codex-runtime` is excluded from Git and Docker build context. Optional per-agent Codex models default to the account catalog.
+- Verified: **22 backend tests passed against PostgreSQL**, including both full mocked provider workflows, Codex thread isolation/resumption, research privacy and attribution, transport secret isolation/tool denial, login origin guards, timeout interruption and wrong-provider recovery rejection. **4 frontend tests passed**, TypeScript passed, production build passed. Migration round-trip/check passed on SQLite and the migration applied to the running PostgreSQL app.
+- Both Docker images built successfully. The pinned CLI and actual isolated app-server initialization were verified inside the backend container. Dashboard health/provider endpoints return successfully through the runtime proxy. These checks use no authenticated model turns.
+- Live ChatGPT device authorization and authenticated inference remain unverified because they require the user's account and usage authorization. Model/account/workspace availability can still reject turns.
+- Saved updated cloud startup guidance and added auth.openai.com/chatgpt.com to the network draft while retaining api.openai.com. Review/save and publication remain user actions. The legacy required RESUME_OPENAI_KEY draft entry should be removed in environment settings for Codex-only/dashboard-key use; the configuration tool cannot delete existing requirements.
+
+Earlier notes describing Codex as a future adapter are superseded by this update. Runtime MCP/skill registry integration remains outside the application.
