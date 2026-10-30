@@ -33,6 +33,8 @@ async def lifespan(app):
     await workflow.recover()
     yield
     await workflow.shutdown()
+    if isinstance(workflow.provider, OpenAIProvider):
+        await workflow.provider.client.close()
 
 
 app = FastAPI(title="AI Resume Evolution", version="0.1.0", lifespan=lifespan)
@@ -155,7 +157,7 @@ async def editable(db, resume_id):
 @app.get("/health")
 async def health(db=Depends(get_db)):
     await db.execute(text("SELECT 1"))
-    return {"status": "ok", "provider_configured": bool(settings().openai_api_key)}
+    return {"status": "ok", "provider_configured": bool(workflow.config.openai_api_key)}
 
 
 @app.get("/resumes")
@@ -370,7 +372,7 @@ async def start_new(db, resume, body):
         workflow.provider, OpenAIProvider
     ):
         raise HTTPException(
-            503, "Configure OPENAI_API_KEY on the backend before starting"
+            503, "Connect an OpenAI API key in the dashboard before starting"
         )
     n = (
         await db.scalar(
@@ -606,3 +608,51 @@ async def review_metric(mid: str, body: s.MetricReviewRequest, db=Depends(get_db
         metric.evidence_status = "VERIFIED"
         await db.commit()
         return public(record)
+
+
+@app.get("/provider")
+async def provider_status():
+    return {
+        "configured": bool(workflow.config.openai_api_key),
+        "source": "session"
+        if workflow.session_key_configured
+        else ("environment" if workflow.config.openai_api_key else "none"),
+        "verified": False,
+    }
+
+
+async def replace_provider(request, key):
+    # Single-user instance. Never change credentials under an in-flight provider request.
+    origin = request.headers.get("origin")
+    if origin and origin not in {settings().cors_origin, "http://127.0.0.1:3000"}:
+        raise HTTPException(
+            403, "Connection settings require the configured dashboard origin"
+        )
+    async with locks["provider_connection"]:
+        if any(not task.done() for task in workflow.tasks.values()):
+            raise HTTPException(
+                409, "Cancel active iterations before changing the provider connection"
+            )
+        old = workflow.provider
+        config = workflow.config.model_copy(update={"openai_api_key": key})
+        workflow.provider = OpenAIProvider(config)
+        workflow.config = config
+        if isinstance(old, OpenAIProvider):
+            await old.client.close()
+
+
+@app.post("/provider/connection")
+async def connect_provider(body: s.ProviderConnectionRequest, request: Request):
+    key = body.api_key.get_secret_value().strip()
+    if not key or any(ord(c) < 33 or ord(c) > 126 for c in key):
+        raise HTTPException(422, "Enter a valid nonempty API key without whitespace")
+    await replace_provider(request, key)
+    workflow.session_key_configured = True
+    return await provider_status()
+
+
+@app.post("/provider/disconnect")
+async def disconnect_provider(request: Request):
+    await replace_provider(request, settings().openai_api_key)
+    workflow.session_key_configured = False
+    return await provider_status()

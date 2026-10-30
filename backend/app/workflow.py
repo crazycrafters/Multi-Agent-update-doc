@@ -93,6 +93,7 @@ class Workflow:
         self.config = config or settings()
         self.provider = provider or OpenAIProvider(self.config)
         self.tasks = {}
+        self.session_key_configured = False
         graph = StateGraph(WorkState)
         for phase in PHASES:
             graph.add_node(phase, self.node)

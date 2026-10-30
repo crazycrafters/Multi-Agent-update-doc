@@ -1,6 +1,6 @@
 from enum import StrEnum
 from typing import Literal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, SecretStr
 
 
 class Status(StrEnum):
@@ -204,3 +204,7 @@ class MetricReviewRequest(Strict):
     reviewed_direct_measurement: Literal[True]
     review_note: str = Field(min_length=10, max_length=5000)
     supported_statement: str = Field(min_length=1, max_length=2000)
+
+
+class ProviderConnectionRequest(Strict):
+    api_key: SecretStr = Field(min_length=1, max_length=1024)

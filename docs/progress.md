@@ -33,3 +33,10 @@ The repository started empty. The application now accepts **any target role name
 - A crash between a billed provider response and database persistence can repeat that call. The token budget is a pre-call gate, not a strict dollar cap.
 
 Use the existing isolated checkout; do not create Git worktrees unless requested. Continue from these verified results and preserve all original resumes and evidence provenance.
+
+## Dashboard credential connection update
+
+- Added a password input and connect/disconnect controls. Keys travel in a POST body to the backend and stay in process memory only; they are absent from browser storage, database records and status responses. Environment keys remain an optional fallback. Restarting loses the session override.
+- Connection status explicitly says configured, not validated. Connecting does not make a paid API request. Active tasks block credential changes; existing API-token protection and an origin check protect connection mutations.
+- Verified: 17 backend tests passed, including session connection/disconnect, status redaction, auth/origin rejection and active-work protection. Three frontend tests passed, including input clearing and no browser-storage persistence. Production build passed.
+- ChatGPT-authenticated Codex threads are a possible future provider integration; this update does not implement that adapter or reuse browser cookies.

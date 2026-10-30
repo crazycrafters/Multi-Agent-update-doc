@@ -20,6 +20,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import Markdown from "react-markdown";
+import { ProviderConnection } from "@/components/provider-connection";
 import { MetricEvidence } from "@/components/metric-evidence";
 import { diffLines } from "diff";
 import { Button } from "@/components/ui/button";
@@ -266,6 +267,7 @@ function Workspace() {
             {error || String(list.error || detail.error)}
           </div>
         )}
+        <ProviderConnection />
         {!rid || tab === "new" ? (
           <form action={upload} className="panel max-w-3xl space-y-6">
             <div>

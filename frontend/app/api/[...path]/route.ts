@@ -12,7 +12,12 @@ async function proxy(
   );
   const url = `${base}/${path.map(encodeURIComponent).join("/")}${request.nextUrl.search}`;
   const headers = new Headers();
-  for (const key of ["content-type", "authorization", "last-event-id"]) {
+  for (const key of [
+    "content-type",
+    "authorization",
+    "last-event-id",
+    "origin",
+  ]) {
     const value = request.headers.get(key);
     if (value) headers.set(key, value);
   }
