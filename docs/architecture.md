@@ -8,4 +8,4 @@ Each durable interview step creates a question, then an answer, then an evaluati
 
 Pause stops after the current durable step; it does not abort an already billed request. Cancel prevents further version activation. Recovery pauses in-progress iterations until the user explicitly resumes. Completed provider outputs are reused; a crash after external success but before persistence can repeat that request. Exactly-once billing is not promised. An iteration that reaches approval never schedules the next cycle automatically.
 
-SSE events persist with increasing IDs. Clients reconnect using an event cursor. Events contain observable outputs, tool results and concise rationales, never hidden reasoning. Current implementation streams durable completed messages, not token-by-token provider deltas.
+SSE events persist with increasing IDs. Clients reconnect using an event cursor. Events contain observable outputs, tool results and concise rationales, never hidden reasoning. Interview answers stream observable text snapshots through persisted SSE events; final structured answers and evaluations remain separate durable records.

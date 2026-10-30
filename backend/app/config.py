@@ -1,10 +1,17 @@
 from functools import lru_cache
+from pydantic import Field, AliasChoices, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     database_url: str = "sqlite+aiosqlite:///./resume.db"
-    openai_api_key: str = ""
+    openai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "RESUME_OPENAI_KEY", "OPENAI_API_KEY", "openai_api_key"
+        ),
+    )
     resume_model: str = "gpt-4.1-mini"
     interviewee_model: str = "gpt-4.1-mini"
     interviewer_model: str = "gpt-4.1-mini"
@@ -14,9 +21,21 @@ class Settings(BaseSettings):
     input_usd_per_million: float | None = None
     output_usd_per_million: float | None = None
     web_search_usd_per_call: float | None = None
-    max_iteration_tokens: int = 150000
+
+    @field_validator(
+        "input_usd_per_million",
+        "output_usd_per_million",
+        "web_search_usd_per_call",
+        mode="before",
+    )
+    @classmethod
+    def empty_price(cls, value):
+        return None if value == "" else value
+
+    max_iteration_tokens: int = Field(default=150000, ge=1000)
     cors_origin: str = "http://localhost:3000"
     api_access_token: str = ""
+
 
 @lru_cache
 def settings():
