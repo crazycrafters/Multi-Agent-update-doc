@@ -79,3 +79,25 @@ pre {
 summary {
   cursor: pointer;
 }
+@keyframes agent-spark {
+  0%,
+  100% {
+    box-shadow: 0 0 2px #5eead4;
+    opacity: 0.65;
+  }
+  50% {
+    box-shadow: 0 0 14px 4px #5eead455;
+    opacity: 1;
+  }
+}
+.agent-spark {
+  animation: agent-spark 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-spark {
+    animation: none;
+  }
+  .animate-pulse {
+    animation: none;
+  }
+}
