@@ -53,6 +53,8 @@ class Result:
 
 
 class OpenAIProvider:
+    kind = "openai"
+
     def __init__(self, config: Settings):
         self.config = config
         self.client = AsyncOpenAI(
@@ -71,6 +73,7 @@ class OpenAIProvider:
         context: dict,
         schema: type[BaseModel],
         on_snapshot=None,
+        scope=None,
     ) -> Result:
         if not self.config.openai_api_key:
             raise RuntimeError("OpenAI credentials are not configured")
@@ -118,7 +121,7 @@ class OpenAIProvider:
             u.output_tokens if u else 0,
         )
 
-    async def research(self, topics: list[str]) -> Result:
+    async def research(self, topics: list[str], scope=None) -> Result:
         if not self.config.openai_api_key:
             raise RuntimeError("OpenAI credentials are not configured")
         response = await self.client.responses.create(

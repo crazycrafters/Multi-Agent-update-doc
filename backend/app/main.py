@@ -14,6 +14,8 @@ from sqlalchemy import select, text, func
 from sqlalchemy.exc import IntegrityError
 from . import models as m, schemas as s
 from .agents import OpenAIProvider
+from .codex_runtime import CodexRuntime, CodexError
+from .codex_provider import CodexProvider
 from .config import settings
 from .database import Session, get_db
 from .workflow import Workflow, create_version, rows, public, event, TERMINAL
@@ -24,6 +26,7 @@ from .logging_config import configure_logging
 
 configure_logging()
 workflow = Workflow()
+codex = CodexRuntime(settings())
 locks = defaultdict(asyncio.Lock)
 rate = defaultdict(deque)
 
@@ -33,6 +36,7 @@ async def lifespan(app):
     await workflow.recover()
     yield
     await workflow.shutdown()
+    await codex.close()
     if isinstance(workflow.provider, OpenAIProvider):
         await workflow.provider.client.close()
 
@@ -157,7 +161,10 @@ async def editable(db, resume_id):
 @app.get("/health")
 async def health(db=Depends(get_db)):
     await db.execute(text("SELECT 1"))
-    return {"status": "ok", "provider_configured": bool(workflow.config.openai_api_key)}
+    return {
+        "status": "ok",
+        "provider_configured": (await provider_status())["configured"],
+    }
 
 
 @app.get("/resumes")
@@ -363,6 +370,11 @@ async def metrics(rid: str, body: s.MetricRequest, db=Depends(get_db)):
 
 
 async def start_new(db, resume, body):
+    async with locks["provider_connection"]:
+        return await start_new_locked(db, resume, body)
+
+
+async def start_new_locked(db, resume, body):
     if not body.provider_consent:
         raise HTTPException(
             422,
@@ -374,6 +386,15 @@ async def start_new(db, resume, body):
         raise HTTPException(
             503, "Connect an OpenAI API key in the dashboard before starting"
         )
+    if isinstance(workflow.provider, CodexProvider):
+        try:
+            await codex.start()
+            if not (await codex.status())["signed_in"]:
+                raise HTTPException(503, "Sign in to Codex first")
+        except CodexError:
+            raise HTTPException(
+                503, "Codex unavailable; check installation and ChatGPT sign-in"
+            )
     n = (
         await db.scalar(
             select(func.max(m.Iteration.number)).where(
@@ -387,6 +408,7 @@ async def start_new(db, resume, body):
         version_id=resume.current_version_id,
         number=n + 1,
         state="RESUME_ANALYSIS",
+        provider=getattr(workflow.provider, "kind", "openai"),
         provider_consent=body.provider_consent,
         research_consent=body.research_consent,
         checkpoint={},
@@ -430,41 +452,55 @@ async def approve(iid: str, body: s.StartRequest, db=Depends(get_db)):
 
 @app.post("/iterations/{iid}/{action}")
 async def control(iid: str, action: str, db=Depends(get_db)):
+    return await control_locked(iid, action, db)
+
+
+async def control_locked(iid, action, db):
     if action not in {"pause", "resume", "cancel", "stop", "retry"}:
         raise HTTPException(404, "Unknown action")
     it = await need(db, m.Iteration, iid)
     async with locks[it.resume_id]:
-        await db.refresh(it)
-        if action == "pause":
-            if it.state in TERMINAL:
-                raise HTTPException(409, "Iteration is not running")
-            it.paused = True
-        elif action == "resume":
-            if it.state in TERMINAL:
-                raise HTTPException(409, "Iteration is not resumable")
-            it.paused = False
-        elif action == "retry":
-            if it.state != "FAILED":
-                raise HTTPException(409, "Only failed iterations can be retried")
-            it.state = it.checkpoint.get("failed_phase", "RESUME_ANALYSIS")
-            it.error = None
-            it.paused = False
-        elif action == "cancel":
-            if it.state in {"COMPLETED", "CANCELLED"}:
-                raise HTTPException(409, "Iteration already finished")
-            it.cancel_requested = True
-            it.state = "CANCELLED"
-        else:
-            if it.state != "AWAITING_APPROVAL":
+        async with locks["provider_connection"]:
+            await db.refresh(it)
+            if action in {"resume", "retry"} and it.provider != getattr(
+                workflow.provider, "kind", "openai"
+            ):
                 raise HTTPException(
-                    409, "Stop requires awaiting approval; use Cancel for active work"
+                    409, "Select the iteration's original provider before resuming"
                 )
-            it.state = "COMPLETED"
-        await event(db, iid, "human", action, {"state": it.state, "paused": it.paused})
-        await db.commit()
-        if action in {"resume", "retry"}:
-            workflow.launch(iid)
-        return public(it)
+            if action == "pause":
+                if it.state in TERMINAL:
+                    raise HTTPException(409, "Iteration is not running")
+                it.paused = True
+            elif action == "resume":
+                if it.state in TERMINAL:
+                    raise HTTPException(409, "Iteration is not resumable")
+                it.paused = False
+            elif action == "retry":
+                if it.state != "FAILED":
+                    raise HTTPException(409, "Only failed iterations can be retried")
+                it.state = it.checkpoint.get("failed_phase", "RESUME_ANALYSIS")
+                it.error = None
+                it.paused = False
+            elif action == "cancel":
+                if it.state in {"COMPLETED", "CANCELLED"}:
+                    raise HTTPException(409, "Iteration already finished")
+                it.cancel_requested = True
+                it.state = "CANCELLED"
+            else:
+                if it.state != "AWAITING_APPROVAL":
+                    raise HTTPException(
+                        409,
+                        "Stop requires awaiting approval; use Cancel for active work",
+                    )
+                it.state = "COMPLETED"
+            await event(
+                db, iid, "human", action, {"state": it.state, "paused": it.paused}
+            )
+            await db.commit()
+            if action in {"resume", "retry"}:
+                workflow.launch(iid)
+            return public(it)
 
 
 @app.get("/iterations/{iid}")
@@ -612,27 +648,48 @@ async def review_metric(mid: str, body: s.MetricReviewRequest, db=Depends(get_db
 
 @app.get("/provider")
 async def provider_status():
+    try:
+        codex_status = await codex.status()
+    except CodexError:
+        codex_status = {
+            "available": codex.available,
+            "signed_in": False,
+            "pending_login": None,
+            "error": "Codex unavailable. Reconnect to try again.",
+        }
+    kind = getattr(workflow.provider, "kind", "openai")
     return {
-        "configured": bool(workflow.config.openai_api_key),
-        "source": "session"
-        if workflow.session_key_configured
-        else ("environment" if workflow.config.openai_api_key else "none"),
+        "provider": kind,
+        "configured": codex_status["signed_in"]
+        if kind == "codex"
+        else bool(workflow.config.openai_api_key),
+        "source": "codex"
+        if kind == "codex"
+        else (
+            "session"
+            if workflow.session_key_configured
+            else ("environment" if workflow.config.openai_api_key else "none")
+        ),
         "verified": False,
+        "codex": codex_status,
     }
 
 
-async def replace_provider(request, key):
-    # Single-user instance. Never change credentials under an in-flight provider request.
+def allow_connection_change(request):
     origin = request.headers.get("origin")
     if origin and origin not in {settings().cors_origin, "http://127.0.0.1:3000"}:
         raise HTTPException(
             403, "Connection settings require the configured dashboard origin"
         )
+    if any(not task.done() for task in workflow.tasks.values()):
+        raise HTTPException(
+            409, "Cancel active iterations before changing the provider connection"
+        )
+
+
+async def replace_provider(request, key):
     async with locks["provider_connection"]:
-        if any(not task.done() for task in workflow.tasks.values()):
-            raise HTTPException(
-                409, "Cancel active iterations before changing the provider connection"
-            )
+        allow_connection_change(request)
         old = workflow.provider
         config = workflow.config.model_copy(update={"openai_api_key": key})
         workflow.provider = OpenAIProvider(config)
@@ -655,4 +712,59 @@ async def connect_provider(body: s.ProviderConnectionRequest, request: Request):
 async def disconnect_provider(request: Request):
     await replace_provider(request, settings().openai_api_key)
     workflow.session_key_configured = False
+    return await provider_status()
+
+
+@app.post("/provider/select")
+async def select_provider(body: s.ProviderSelectRequest, request: Request):
+    async with locks["provider_connection"]:
+        allow_connection_change(request)
+        if body.provider == "codex":
+            try:
+                await codex.start()
+                if not (await codex.status())["signed_in"]:
+                    raise HTTPException(
+                        409, "Sign in with ChatGPT before selecting Codex"
+                    )
+            except CodexError:
+                raise HTTPException(
+                    503, "Codex unavailable. Install the pinned CLI or check sign-in."
+                )
+            next_provider = CodexProvider(workflow.config, codex, workflow.sessions)
+        else:
+            next_provider = OpenAIProvider(workflow.config)
+        old = workflow.provider
+        workflow.provider = next_provider
+        if isinstance(old, OpenAIProvider):
+            await old.client.close()
+    return await provider_status()
+
+
+@app.post("/provider/codex/login")
+async def codex_login(request: Request):
+    async with locks["provider_connection"]:
+        allow_connection_change(request)
+        try:
+            await codex.start()
+            if not (await codex.status())["signed_in"]:
+                await codex.begin_login()
+        except CodexError:
+            raise HTTPException(
+                503,
+                "Codex sign-in unavailable. Check CLI installation, network access and device-code login availability.",
+            )
+    return await provider_status()
+
+
+@app.post("/provider/codex/logout")
+async def codex_logout(request: Request):
+    async with locks["provider_connection"]:
+        allow_connection_change(request)
+        try:
+            await codex.logout()
+        except CodexError:
+            raise HTTPException(
+                503,
+                "Codex logout failed. Retry before assuming saved credentials were removed.",
+            )
     return await provider_status()

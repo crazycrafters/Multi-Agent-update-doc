@@ -125,6 +125,7 @@ class Iteration(Record, Base):
     version_id: Mapped[str] = mapped_column(ForeignKey("resume_versions.id"))
     output_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     number: Mapped[int]
+    provider: Mapped[str] = mapped_column(default="openai", server_default="openai")
     state: Mapped[str] = mapped_column(default="IDLE")
     paused: Mapped[bool] = mapped_column(default=False)
     cancel_requested: Mapped[bool] = mapped_column(default=False)
@@ -241,3 +242,12 @@ class AgentEvent(Base):
     agent: Mapped[str]
     kind: Mapped[str]
     data: Mapped[dict] = mapped_column(JSON)
+
+
+class ProviderThread(Record, Base):
+    __tablename__ = "provider_threads"
+    __table_args__ = (UniqueConstraint("iteration_id", "agent", "channel"),)
+    iteration_id: Mapped[str] = mapped_column(ForeignKey("iterations.id"))
+    agent: Mapped[str]
+    channel: Mapped[str]
+    thread_id: Mapped[str]

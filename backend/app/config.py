@@ -4,7 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", populate_by_name=True
+    )
     database_url: str = "sqlite+aiosqlite:///./resume.db"
     openai_api_key: str = Field(
         default="",
@@ -12,6 +14,15 @@ class Settings(BaseSettings):
             "RESUME_OPENAI_KEY", "OPENAI_API_KEY", "openai_api_key"
         ),
     )
+    codex_binary: str = Field(default="codex", validation_alias="RESUME_CODEX_BINARY")
+    codex_home: str = Field(
+        default=".codex-runtime", validation_alias="RESUME_CODEX_HOME"
+    )
+    codex_model: str | None = None
+    codex_resume_model: str | None = None
+    codex_interviewee_model: str | None = None
+    codex_interviewer_model: str | None = None
+    codex_timeout_seconds: float = 180
     resume_model: str = "gpt-4.1-mini"
     interviewee_model: str = "gpt-4.1-mini"
     interviewer_model: str = "gpt-4.1-mini"

@@ -308,7 +308,7 @@ async def test_no_attributable_research_preserves_approval_gate(env):
 
     c, factory, runner, p = env
 
-    async def empty(topics):
+    async def empty(topics, scope=None):
         return Result(
             {"text": "No relevant attributable sources", "sources": []}, 10, 10, 1
         )

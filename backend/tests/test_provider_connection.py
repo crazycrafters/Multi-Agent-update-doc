@@ -14,7 +14,9 @@ async def test_connect_status_disconnect_keeps_key_out_of_responses_and_database
         json={"api_key": secret},
         headers={"Origin": "http://localhost:3000"},
     )
-    assert r.status_code == 200 and r.json() == {
+    assert r.status_code == 200 and {
+        k: r.json()[k] for k in ["configured", "source", "verified"]
+    } == {
         "configured": True,
         "source": "session",
         "verified": False,

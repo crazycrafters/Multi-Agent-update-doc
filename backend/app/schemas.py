@@ -208,3 +208,17 @@ class MetricReviewRequest(Strict):
 
 class ProviderConnectionRequest(Strict):
     api_key: SecretStr = Field(min_length=1, max_length=1024)
+
+
+class ProviderSelectRequest(Strict):
+    provider: Literal["openai", "codex"]
+
+
+class CodexResearchSource(Strict):
+    url: str
+    title: str
+
+
+class CodexResearchResult(Strict):
+    text: str
+    sources: list[CodexResearchSource]

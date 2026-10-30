@@ -17,7 +17,9 @@ class TestProvider:
     def model(self, agent):
         return "test-only"
 
-    async def generate(self, agent, task, context, schema, on_snapshot=None):
+    async def generate(
+        self, agent, task, context, schema, on_snapshot=None, scope=None
+    ):
         self.calls.append((agent, task, context))
         self.entered.set()
         if self.gate:
@@ -118,7 +120,7 @@ class TestProvider:
             await on_snapshot(data["text"])
         return Result(schema.model_validate(data).model_dump(mode="json"), 100, 50)
 
-    async def research(self, topics):
+    async def research(self, topics, scope=None):
         self.calls.append(("resume", "research", {"topics": topics}))
         return Result(
             {

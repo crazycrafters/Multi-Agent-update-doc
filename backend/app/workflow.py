@@ -259,13 +259,15 @@ class Workflow:
 
         try:
             if topics is not None:
-                result = await self.provider.research(topics)
+                result = await self.provider.research(topics, scope=it_id)
             elif agent == "interviewee" and task.endswith(" answer"):
                 result = await self.provider.generate(
-                    agent, task, context, schema, on_snapshot=snapshot
+                    agent, task, context, schema, on_snapshot=snapshot, scope=it_id
                 )
             else:
-                result = await self.provider.generate(agent, task, context, schema)
+                result = await self.provider.generate(
+                    agent, task, context, schema, scope=it_id
+                )
             if schema:
                 result.data = schema.model_validate(result.data).model_dump(mode="json")
             async with self.sessions() as db:
@@ -276,7 +278,8 @@ class Workflow:
                 ex.output_tokens = result.output_tokens
                 c = self.config
                 if (
-                    c.input_usd_per_million is not None
+                    getattr(self.provider, "kind", "openai") == "openai"
+                    and c.input_usd_per_million is not None
                     and c.output_usd_per_million is not None
                     and (
                         not result.search_calls or c.web_search_usd_per_call is not None
@@ -317,6 +320,10 @@ class Workflow:
                     it = await db.get(m.Iteration, it_id)
                     if not it or it.state in TERMINAL:
                         return
+                    if it.provider != getattr(self.provider, "kind", "openai"):
+                        raise RuntimeError(
+                            "Select the iteration's original provider before resuming"
+                        )
                     if it.cancel_requested:
                         it.state = "CANCELLED"
                         await event(
