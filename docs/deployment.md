@@ -1,0 +1,11 @@
+# Deployment
+
+For a private workstation use Compose and keep the default loopback bindings. Persistent PostgreSQL data lives in a named volume. Back up PostgreSQL before upgrades and test restores. Run Alembic migrations once before accepting requests. Do not remove the volume unless intentionally deleting all candidate data.
+
+For production: terminate HTTPS at a trusted reverse proxy, disable proxy buffering for SSE, require authenticated single-user access, set API_ACCESS_TOKEN, restrict network access to the backend, configure encrypted PostgreSQL connections and backups, encrypt storage, set retention/deletion policy for sensitive resumes, and use a secret manager for OPENAI_API_KEY. Keep one backend worker. Do not expose this application as multi-tenant SaaS without implementing authorization and per-user isolation. Source URLs and Markdown render as untrusted text; arbitrary HTML is not enabled.
+
+OpenAI receives the resume, role, job description and evidence only after explicit start consent. Web research has separate consent; use it only with permission to disclose derived topics. Provider `store=False` is set, but provider account retention policies still apply. No telemetry or raw provider error bodies are logged by application code. Configure model-specific pricing before treating estimates as useful; verify current provider prices separately.
+
+Managed-cloud Docker builds need the session CA mounted as a BuildKit `proxy_ca` secret. Use the complete trusted system bundle for Python where appropriate. Preserve Docker's configured proxy. Never disable TLS verification. Runtime provider calls also need the managed CA mounted read-only and SSL_CERT_FILE set to the combined bundle. On a normal local Docker host public trust roots suffice.
+
+Known limits: single-user auth, no distributed lease/queue, no OCR, basic export typography (PDF standard fonts have limited non-Latin coverage), no automatic artifact verification and no sandboxed document-parser process. The upload limits reduce resource use but do not replace process isolation for hostile multi-user uploads. A live provider smoke run is a separate validation from deterministic integration tests.

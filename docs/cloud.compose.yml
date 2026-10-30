@@ -1,0 +1,14 @@
+services:
+  backend:
+    build:
+      secrets: [proxy_ca]
+    environment:
+      SSL_CERT_FILE: /run/proxy-ca.pem
+    volumes:
+      - /etc/ssl/certs/ca-certificates.crt:/run/proxy-ca.pem:ro
+  frontend:
+    build:
+      secrets: [proxy_ca]
+secrets:
+  proxy_ca:
+    file: /etc/ssl/certs/ca-certificates.crt

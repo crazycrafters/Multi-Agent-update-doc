@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: resume
+      POSTGRES_USER: resume
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-resume-development}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resume -d resume"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://resume:${POSTGRES_PASSWORD:-local-resume-development}@db:5432/resume
+      OPENAI_API_KEY: ${RESUME_OPENAI_KEY:-${OPENAI_API_KEY:-}}
+      RESUME_MODEL: ${RESUME_MODEL:-gpt-4.1-mini}
+      INTERVIEWEE_MODEL: ${INTERVIEWEE_MODEL:-gpt-4.1-mini}
+      INTERVIEWER_MODEL: ${INTERVIEWER_MODEL:-gpt-4.1-mini}
+      API_ACCESS_TOKEN: ${API_ACCESS_TOKEN:-}
+      INPUT_USD_PER_MILLION: ${INPUT_USD_PER_MILLION:-}
+      OUTPUT_USD_PER_MILLION: ${OUTPUT_USD_PER_MILLION:-}
+      WEB_SEARCH_USD_PER_CALL: ${WEB_SEARCH_USD_PER_CALL:-}
+      MAX_ITERATION_TOKENS: ${MAX_ITERATION_TOKENS:-150000}
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [backend]
+    restart: unless-stopped
+volumes:
+  postgres_data:
