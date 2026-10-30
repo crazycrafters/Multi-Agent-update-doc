@@ -1,0 +1,11 @@
+# Architecture
+
+Next.js proxies same-origin API requests and replayable SSE to FastAPI. TanStack Query loads persistent views. Three separate OpenAI Responses agents use strict Pydantic outputs, model selection, timeout and SDK retry. Only the resume agent receives a web-search tool, only during consented research. LangGraph routes the persisted phase into the appropriate handler. Each external operation has an AgentExecution record and cached completed output. SQLAlchemy stores typed interview records, immutable versions, evidence links and audit history. Alembic owns schema changes.
+
+PostgreSQL is the Compose database; SQLite supports lightweight development and deterministic tests. The orchestrator uses one API worker. Application-local locks serialize mutations for a resume; do not run multiple backend workers/replicas. A distributed deployment needs database leases, a durable job queue, authentication, authorization and shared rate limiting before horizontal scaling.
+
+Each durable interview step creates a question, then an answer, then an evaluation. Ten primary questions may each receive one adaptive follow-up. Context includes the current transcript and the most recent twenty earlier questions. No fixed iteration limit exists. Both initial drafting and post-interview revision undergo an independent audit. Resume activation, provenance and revisions commit in one transaction.
+
+Pause stops after the current durable step; it does not abort an already billed request. Cancel prevents further version activation. Recovery pauses in-progress iterations until the user explicitly resumes. Completed provider outputs are reused; a crash after external success but before persistence can repeat that request. Exactly-once billing is not promised. An iteration that reaches approval never schedules the next cycle automatically.
+
+SSE events persist with increasing IDs. Clients reconnect using an event cursor. Events contain observable outputs, tool results and concise rationales, never hidden reasoning. Current implementation streams durable completed messages, not token-by-token provider deltas.

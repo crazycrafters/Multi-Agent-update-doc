@@ -156,3 +156,8 @@ class MetricRequest(Strict):
     source_reference: str = Field(min_length=1)
     limitations: str
     relationship: Literal['percentage_point_change','relative_percentage_change','absolute_change','correlation','causal_evidence']
+
+class MetricReviewRequest(Strict):
+    reviewed_direct_measurement: Literal[True]
+    review_note: str = Field(min_length=10,max_length=5000)
+    supported_statement: str = Field(min_length=1,max_length=2000)
